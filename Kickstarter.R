@@ -16,6 +16,23 @@ test_x <- read_csv("ks_test_X.csv")
 
 #join the training y to the training x file
 #also turn two of the target variables into factors
+a<-stringr::str_extract_all(train_x$reward_amounts, "\\d+")
+
+remove_zero<- function(a){
+  a[seq_along(a)%% 2==1]
+}
+
+a<-lapply(a,remove_zero)
+
+a<-lapply(a,as.numeric)
+train_x$avg_reward_amt<-unlist(lapply(a, mean))
+
+
+
+
+train_x['days_active']<-difftime(train$deadline,train$launched_at,units='days')
+
+train_x['launch_month']<-month(train$launched_at)
 
 train <- train_x %>%
   left_join(train_y, by = "id") %>%
@@ -38,34 +55,18 @@ train <- train_x %>%
   mutate(afinn_pos_norm=round(afinn_pos/num_words,1),
              afinn_neg_norm=round(afinn_neg/num_words,1))%>%
   mutate(success = as.factor(success),
-         big_hit = as.factor(big_hit),
-         creator_id= as.factor(creator_id),
-         numfaces_project = as.factor(numfaces_project),
-         numfaces_creator = as.factor(numfaces_creator),
-         male_project = as.factor(male_project),
-         male_creator = as.factor(male_creator),
-         female_project=as.factor(female_project),
-         female_creator = as.factor(female_creator),
          isTextPic = as.factor(isTextPic),
          isLogoPic = as.factor(isLogoPic),
+         launch_month= as.factor(launch_month),
          isCalendarPic = as.factor(isCalendarPic),
          isDiagramPic = as.factor(isDiagramPic),
-         isShapePic=as.factor(isShapePic)) 
+         isShapePic=as.factor(isShapePic),
+         days_active=as.numeric(days_active),
+         afinn_pos_norm=ifelse (is.na(afinn_pos_norm),0,afinn_pos_norm),
+         afinn_neg_norm=ifelse (is.na(afinn_neg_norm),0,afinn_neg_norm),
+         avg_reward_amt=ifelse (is.na(avg_reward_amt),0,avg_reward_amt))
+        
 
-a<-stringr::str_extract_all(train$reward_amounts, "\\d+")
-
-remove_zero<- function(a){
-  a[seq_along(a)%% 2==1]
-}
-
-a<-lapply(a,remove_zero)
-
-a<-lapply(a,as.numeric)
-train$avg_reward_amt<-unlist(lapply(a, mean))
-  
-train['days_active']<-difftime(train$deadline,train$launched_at,units='days')
-
-train['launch_month']<-month(train$launched_at)
 
 
 
@@ -113,7 +114,7 @@ dense = subset(dense, select=-c(get("success")))
 train <- cbind(train, dense)
 
 train_success <- train %>%
-  select(-c(id,big_hit, backers_count,creator_name,captions,name,blurb,tag_names,created_at,accent_color,category_parent,isbwImg1,accent_color,color_foreground,color_background,avg_wordlengths,sentence_counter,avgsentencelength,avgsyls,reward_descriptions,deadline,launched_at,count,reward_amounts,afinn_pos,afinn_neg))
+  select(-c(id,big_hit,creator_id, backers_count,creator_name,captions,name,blurb,tag_names,created_at,accent_color,category_parent,isbwImg1,accent_color,color_foreground,color_background,avg_wordlengths,sentence_counter,avgsentencelength,avgsyls,reward_descriptions,deadline,launched_at,count,reward_amounts,afinn_pos,afinn_neg))
 
 
 train_inst = sample(nrow(train_success), .7*nrow(train_success))
@@ -129,7 +130,7 @@ write.table(data_train, "data_train.csv", row.names = FALSE)
 
 
 
-logistic_success <- glm(success~goal, data = data_train, family = "binomial")
+logistic_success <- glm(success~., data = data_train, family = "binomial")
 probs_success_train <- predict(logistic_success, newdata = data_train%>%select(-success), type = "response")
 probs_success_valid <- predict(logistic_success, newdata = data_valid%>%select(-success), type = "response")
 
@@ -259,10 +260,9 @@ accuracy <- function(classifications, actuals){
   return(acc)
 }
 
-mycontrol = tree.control(nobs = nrow(train_success), mincut = 1, minsize = 2, mindev = 0.00005)
+mycontrol = tree.control(nobs = nrow(data_train), mincut = 1, minsize = 2, mindev = 0.00005)
 full_tree <- tree(success ~ . ,
-                  data = train_success, 
-                  control = mycontrol)
+                  data = data_train)
 
 
 
