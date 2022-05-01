@@ -1,5 +1,12 @@
 #load libraries
 library(tidyverse)
+library(lubridate)
+library(text2vec)
+library(tm)
+library(tidyr)
+library(readr)
+library(tree)
+
 
 #load data files
 train_x <- read_csv("ks_training_X.csv")
@@ -9,17 +16,104 @@ test_x <- read_csv("ks_test_X.csv")
 
 #join the training y to the training x file
 #also turn two of the target variables into factors
+
 train <- train_x %>%
   left_join(train_y, by = "id") %>%
+  group_by(category_name) %>%
+  mutate(count=n())%>%
+  ungroup()%>%
+  mutate(category_name=if_else(count<20,'Other',category_name))%>%
+  mutate(location_slug =if_else(location_slug=="None",region,str_sub(location_slug, start= -2)))%>%
+  mutate(smiling_project=if_else(smiling_project>100,100,round(smiling_project,0)),
+        smiling_creator=if_else(smiling_creator>100,100,round(smiling_creator,0)))%>%
+  mutate(isbwImg1=ifelse (is.na(isbwImg1),'NULL',isbwImg1),
+         color_foreground=ifelse (is.na(color_foreground),'NULL',color_foreground),
+         color_background=ifelse (is.na(color_background),'NULL',color_background),
+         isTextPic=ifelse (is.na(isTextPic),'NULL',isTextPic),
+         isLogoPic=ifelse (is.na(isLogoPic),'NULL',isLogoPic),
+         isCalendarPic=ifelse (is.na(isCalendarPic),'NULL',isCalendarPic),
+         isDiagramPic=ifelse (is.na(isDiagramPic),'NULL',isDiagramPic),
+         isShapePic=ifelse (is.na(isShapePic),'NULL',isShapePic)
+  )%>%
+  mutate(afinn_pos_norm=round(afinn_pos/num_words,1),
+             afinn_neg_norm=round(afinn_neg/num_words,1))%>%
   mutate(success = as.factor(success),
-         big_hit = as.factor(big_hit))
+         big_hit = as.factor(big_hit),
+         creator_id= as.factor(creator_id),
+         numfaces_project = as.factor(numfaces_project),
+         numfaces_creator = as.factor(numfaces_creator),
+         male_project = as.factor(male_project),
+         male_creator = as.factor(male_creator),
+         female_project=as.factor(female_project),
+         female_creator = as.factor(female_creator),
+         isTextPic = as.factor(isTextPic),
+         isLogoPic = as.factor(isLogoPic),
+         isCalendarPic = as.factor(isCalendarPic),
+         isDiagramPic = as.factor(isDiagramPic),
+         isShapePic=as.factor(isShapePic)) 
 
-summary(train)
+a<-stringr::str_extract_all(train$reward_amounts, "\\d+")
 
-View(train)
+remove_zero<- function(a){
+  a[seq_along(a)%% 2==1]
+}
+
+a<-lapply(a,remove_zero)
+
+a<-lapply(a,as.numeric)
+train$avg_reward_amt<-unlist(lapply(a, mean))
+  
+train['days_active']<-difftime(train$deadline,train$launched_at,units='days')
+
+train['launch_month']<-month(train$launched_at)
+
+
+
+# Iterate over the individual documents and convert them to tokens
+# Uses the functions defined above.
+prep_fun = tolower
+cleaning_tokenizer <- function(v) {
+  v %>%
+    removeNumbers %>% #remove all numbers
+    removePunctuation %>%
+    removeWords(stopwords(kind="en")) %>% #remove stopwords
+    stemDocument %>%
+    word_tokenizer 
+}
+tok_fun = cleaning_tokenizer
+
+# Iterate over the individual documents and convert them to tokens
+# Uses the functions defined above.
+it_train = itoken(train$blurb, 
+                  preprocessor = prep_fun, 
+                  tokenizer = tok_fun, 
+                  ids = train$id, 
+                  progressbar = FALSE)
+
+# Create the vocabulary from the itoken object
+vocab = create_vocabulary(it_train)
+vocab_small = prune_vocabulary(vocab, vocab_term_max = 500)
+
+# Create a vectorizer object using the vocabulary we learned
+vectorizer = vocab_vectorizer(vocab_small)
+
+# Convert the training documents into a DTM and make it a binary BOW matrix
+dtm_train = create_dtm(it_train, vectorizer)
+dim(dtm_train)
+dtm_train_bin <- dtm_train>0+0
+
+
+# Convert the small sparse matrix into a dense one
+dense = as.matrix(dtm_train_bin)+0
+
+dense = subset(dense, select=-c(get("goal")))
+
+dense = subset(dense, select=-c(get("success")))
+# Use cbind() to append the columns
+train <- cbind(train, dense)
 
 train_success <- train %>%
-  select(-c(big_hit, backers_count))
+  select(-c(id,big_hit, backers_count,creator_name,captions,name,blurb,tag_names,created_at,accent_color,category_parent,isbwImg1,accent_color,color_foreground,color_background,avg_wordlengths,sentence_counter,avgsentencelength,avgsyls,reward_descriptions,deadline,launched_at,count,reward_amounts,afinn_pos,afinn_neg))
 
 
 train_inst = sample(nrow(train_success), .7*nrow(train_success))
@@ -165,9 +259,9 @@ accuracy <- function(classifications, actuals){
   return(acc)
 }
 
-mycontrol = tree.control(nobs = nrow(data_train), mincut = 1, minsize = 2, mindev = 0.00005)
-full_tree <- tree(success ~ goal+as.factor(category_parent)+as.factor(location_type),
-                  data = data_train, 
+mycontrol = tree.control(nobs = nrow(train_success), mincut = 1, minsize = 2, mindev = 0.00005)
+full_tree <- tree(success ~ . ,
+                  data = train_success, 
                   control = mycontrol)
 
 
