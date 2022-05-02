@@ -30,9 +30,9 @@ train_x$avg_reward_amt<-unlist(lapply(a, mean))
 
 
 
-train_x['days_active']<-difftime(train$deadline,train$launched_at,units='days')
+train_x['days_active']<-difftime(train_x$deadline,train_x$launched_at,units='days')
 
-train_x['launch_month']<-month(train$launched_at)
+train_x['launch_month']<-month(train_x$launched_at)
 
 train <- train_x %>%
   left_join(train_y, by = "id") %>%
@@ -40,7 +40,7 @@ train <- train_x %>%
   mutate(count=n())%>%
   ungroup()%>%
   mutate(category_name=if_else(count<20,'Other',category_name))%>%
-  mutate(location_slug =if_else(location_slug=="None",region,str_sub(location_slug, start= -2)))%>%
+  mutate(location_slug =if_else(location_slug=="None","US",str_sub(location_slug, start= -2)))%>%
   mutate(smiling_project=if_else(smiling_project>100,100,round(smiling_project,0)),
         smiling_creator=if_else(smiling_creator>100,100,round(smiling_creator,0)))%>%
   mutate(isbwImg1=ifelse (is.na(isbwImg1),2,isbwImg1),
@@ -67,16 +67,16 @@ train <- train_x %>%
          afinn_neg_norm=ifelse (is.na(afinn_neg_norm),0,afinn_neg_norm),
          avg_reward_amt=ifelse (is.na(avg_reward_amt),0,avg_reward_amt),
          perday= goal/days_active,
-         ADV=ifelse (num_words==0,0,round(ADV/num_words,4)),
-         NOUN=ifelse (num_words==0,0,round(NOUN/num_words,4)),
-         ADP=ifelse (num_words==0,0,round(ADP/num_words,4)),
-         PRT=ifelse (num_words==0,0,round(PRT/num_words,4)),
-         DET=ifelse (num_words==0,0,round(DET/num_words,4)),
-         PRON=ifelse (num_words==0,0,round(PRON/num_words,4)),
-         VERB=ifelse (num_words==0,0,round(VERB/num_words,4)),
-         NUM=ifelse (num_words==0,0,round(NUM/num_words,4)),
-         CONJ=ifelse (num_words==0,0,round(CONJ/num_words,4)),
-         ADJ=ifelse (num_words==0,0,round(ADJ/num_words,4)))
+         ADV=ifelse (is.na(round(ADV/num_words,4)),0,round(ADV/num_words,4)),
+         NOUN=ifelse (is.na(round(NOUN/num_words,4)),0,round(NOUN/num_words,4)),
+         ADP=ifelse (is.na(round(ADP/num_words,4)),0,round(ADP/num_words,4)),
+         PRT=ifelse (is.na(round(PRT/num_words,4)),0,round(PRT/num_words,4)),
+         DET=ifelse (is.na(round(DET/num_words,4)),0,round(DET/num_words,4)),
+         PRON=ifelse (is.na(round(PRON/num_words,4)),0,round(PRON/num_words,4)),
+         VERB=ifelse (is.na(round(VERB/num_words,4)),0,round(VERB/num_words,4)),
+         NUM=ifelse (is.na(round(NUM/num_words,4)),0,round(NUM/num_words,4)),
+         CONJ=ifelse (is.na(round(CONJ/num_words,4)),0,round(CONJ/num_words,4)),
+         ADJ=ifelse (is.na(round(ADJ/num_words,4)),0,round(ADJ/num_words,4)))
         
 
 
@@ -381,9 +381,9 @@ library(caret)
 
 
 
-rf.mod <- randomForest(success~goal+category_parent+location_type,
+rf.mod <- randomForest(success~.,
                        data=data_train,
-                       mtry=2, ntree=200,
+                       mtry=42,
                        importance=TRUE)
 
 rf_preds <- predict(rf.mod, newdata=data_valid)
