@@ -43,7 +43,7 @@ train <- train_x %>%
   mutate(location_slug =if_else(location_slug=="None",region,str_sub(location_slug, start= -2)))%>%
   mutate(smiling_project=if_else(smiling_project>100,100,round(smiling_project,0)),
         smiling_creator=if_else(smiling_creator>100,100,round(smiling_creator,0)))%>%
-  mutate(isbwImg1=ifelse (is.na(isbwImg1),'NULL',isbwImg1),
+  mutate(isbwImg1=ifelse (is.na(isbwImg1),2,isbwImg1),
          color_foreground=ifelse (is.na(color_foreground),'NULL',color_foreground),
          color_background=ifelse (is.na(color_background),'NULL',color_background),
          isTextPic=ifelse (is.na(isTextPic),'NULL',isTextPic),
@@ -51,9 +51,10 @@ train <- train_x %>%
          isCalendarPic=ifelse (is.na(isCalendarPic),'NULL',isCalendarPic),
          isDiagramPic=ifelse (is.na(isDiagramPic),'NULL',isDiagramPic),
          isShapePic=ifelse (is.na(isShapePic),'NULL',isShapePic)
+         
   )%>%
-  mutate(afinn_pos_norm=round(afinn_pos/num_words,1),
-             afinn_neg_norm=round(afinn_neg/num_words,1))%>%
+  mutate(afinn_pos_norm=round(afinn_pos/num_words,4),
+             afinn_neg_norm=round(afinn_neg/num_words,4))%>%
   mutate(success = as.factor(success),
          isTextPic = as.factor(isTextPic),
          isLogoPic = as.factor(isLogoPic),
@@ -64,7 +65,18 @@ train <- train_x %>%
          days_active=as.numeric(days_active),
          afinn_pos_norm=ifelse (is.na(afinn_pos_norm),0,afinn_pos_norm),
          afinn_neg_norm=ifelse (is.na(afinn_neg_norm),0,afinn_neg_norm),
-         avg_reward_amt=ifelse (is.na(avg_reward_amt),0,avg_reward_amt))
+         avg_reward_amt=ifelse (is.na(avg_reward_amt),0,avg_reward_amt),
+         perday= goal/days_active,
+         ADV=ifelse (num_words==0,0,round(ADV/num_words,4)),
+         NOUN=ifelse (num_words==0,0,round(NOUN/num_words,4)),
+         ADP=ifelse (num_words==0,0,round(ADP/num_words,4)),
+         PRT=ifelse (num_words==0,0,round(PRT/num_words,4)),
+         DET=ifelse (num_words==0,0,round(DET/num_words,4)),
+         PRON=ifelse (num_words==0,0,round(PRON/num_words,4)),
+         VERB=ifelse (num_words==0,0,round(VERB/num_words,4)),
+         NUM=ifelse (num_words==0,0,round(NUM/num_words,4)),
+         CONJ=ifelse (num_words==0,0,round(CONJ/num_words,4)),
+         ADJ=ifelse (num_words==0,0,round(ADJ/num_words,4)))
         
 
 
@@ -114,7 +126,7 @@ dense = subset(dense, select=-c(get("success")))
 train <- cbind(train, dense)
 
 train_success <- train %>%
-  select(-c(id,big_hit,creator_id, backers_count,creator_name,captions,name,blurb,tag_names,created_at,accent_color,category_parent,isbwImg1,accent_color,color_foreground,color_background,avg_wordlengths,sentence_counter,avgsentencelength,avgsyls,reward_descriptions,deadline,launched_at,count,reward_amounts,afinn_pos,afinn_neg))
+  select(-c(id,big_hit,creator_id, backers_count,creator_name,captions,name,blurb,tag_names,created_at,accent_color,isbwImg1,accent_color,color_foreground,color_background,avg_wordlengths,sentence_counter,avgsentencelength,avgsyls,reward_descriptions,deadline,launched_at,count,reward_amounts,afinn_pos,afinn_neg))
 
 
 train_inst = sample(nrow(train_success), .7*nrow(train_success))
@@ -144,7 +156,7 @@ summary(classifications_success_train)
 #make binary classifications (make sure to check for NAs!)
 classifications_success_valid <- ifelse(probs_success_valid > .45, "YES", "NO")
 classifications_success_valid <- ifelse(is.na(classifications_success_valid), "NO", classifications_success_valid)
-summary(classifications_success_valid)
+summary(logistic_success)
 
 
 accuracy <- function(classifications, actuals){
@@ -201,7 +213,7 @@ probs_success_test <- predict(logistic_success, newdata = test_x, type = "respon
 #make binary classifications training (make sure to check for NAs!)
 classifications_success_train <- ifelse(probs_success_train > 0.45, "YES", "NO")
 classifications_success_train <- ifelse(is.na(classifications_success_train), "NO", classifications_success_train)
-summary(classifications_success_train)
+summary(logistic_success)
 
 #make binary classifications (make sure to check for NAs!)
 classifications_success_valid <- ifelse(probs_success_valid > .45, "YES", "NO")
@@ -260,13 +272,14 @@ accuracy <- function(classifications, actuals){
   return(acc)
 }
 
-mycontrol = tree.control(nobs = nrow(data_train), mincut = 1, minsize = 2, mindev = 0.00005)
+mycontrol = tree.control(nobs = nrow(data_train), mincut = 5, minsize = 10, mindev = 0.0001)
 full_tree <- tree(success ~ . ,
-                  data = data_train)
+                  data = data_train,
+                  control = mycontrol)
 
 
 
-treelength <- c(2, 4, 6, 8, 10, 15, 20, 25, 30, 35,40)
+treelength <- c(2, 4, 6, 8, 10, 15, 20, 25, 30, 35,40,100,150,200)
 test_acc <- rep(0, length(treelength))
 train_acc <- rep(0, length(treelength))
 
@@ -290,7 +303,7 @@ legend("bottomright",
 
 
 
-pruned_tree_15=prune.tree(full_tree, best = 10)
+pruned_tree_15=prune.tree(full_tree, best = 150)
 summary(pruned_tree_15)
 plot(pruned_tree_15)
 text(pruned_tree_15,pretty=1)
