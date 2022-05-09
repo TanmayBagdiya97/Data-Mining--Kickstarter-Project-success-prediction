@@ -525,11 +525,12 @@ dvalid = xgb.DMatrix(as.matrix(valid_data_new))
 bst <- xgboost(dtrain, max.depth = 2, eta = 0.2, nrounds = 1000,colsample_bylevel=0.25,verbose = 0)
 
 
-colnames(dtest) <- NULL
 bst_pred <- predict(bst, dvalid)
 bst_classifications <- ifelse(bst_pred > 0.5, 'YES', 'NO')
 bst_acc <- mean(ifelse(bst_classifications == data_valid$success, 1, 0))
 bst_acc
+
+
 
 library(vip)
 vip(bst,num_features = 20)
@@ -571,13 +572,17 @@ grid_search <- function(){
 
 grid_search()
 
+
 train_success<-train_success%>%select(-c(success))
 dummy <- dummyVars( ~ . , data=train_success)
 one_hot_test_data <- data.frame(predict(dummy, newdata =train_success))
-
-
-dtest = xgb.DMatrix(as.matrix(test_data_new))
-colnames(dtest) <- NULL
+cols<-intersect(colnames(one_hot_test_data),colnames(train_data_new))
+cols2<-colnames(train_data_new%>%select(-cols))
+for(i in c(1:length(cols2))){
+  one_hot_test_data[cols2[i]]<-0
+}
+one_hot_test_data<-one_hot_test_data%>%select(colnames(train_data_new))
+dtest = xgb.DMatrix(as.matrix(one_hot_test_data))
 bst_pred <- predict(bst, dtest)
 bst_classifications <- ifelse(bst_pred > 0.5, 'YES', 'NO')
 table(bst_classifications)
