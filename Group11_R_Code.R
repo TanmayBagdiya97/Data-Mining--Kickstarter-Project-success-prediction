@@ -11,6 +11,7 @@ library(rpart)
 library(caret)
 library(randomForest)
 
+set.seed(123)
 #load data files
 train_x <- read_csv("ks_training_X.csv")
 train_y <- read_csv("ks_training_y.csv")
@@ -528,6 +529,7 @@ one_hot_test_data <- data.frame(predict(dummy, newdata =test))
 cols<-intersect(colnames(one_hot_test_data),colnames(train_data_new))
 cols2<-colnames(train_data_new%>%select(-cols))
 one_hot_test_data<-one_hot_test_data%>%select(colnames(train_data_new))
+
 
 
 
